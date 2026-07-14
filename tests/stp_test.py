@@ -1,3 +1,4 @@
+import copy
 import os
 from unittest.mock import MagicMock, patch
 import click
@@ -154,6 +155,374 @@ class TestStp(object):
             print(f'Error Output:\n{result.output}')
             assert result.exit_code == 0
             assert result.output == show_spanning_tree_root_guard
+
+
+show_spanning_tree_mst_instance_0 = """\
+Spanning-tree Mode: MST
+
+MST Instance 0 - VLANs: none
+--------------------------------------------------------------------
+MST Bridge Parameters:
+Bridge               Bridge    Root   Root   Root   Hold  
+Identifier           Priority  MaxAge Hello  FwdDly Time  
+hex                            sec    sec    sec    sec   
+8064b86a97e24e9c     32768     20     2      15     1     
+
+RootBridge           RootPath    RegionalRoot         RootPort       Max  Hel  Fwd
+Identifier           Cost        Identifier                          Age  lo   Dly
+hex                              hex                                 sec  sec  sec
+0064b86a97e24e9c     600         0064b86a97e24e9c     Ethernet4      20   2    15
+
+MST Port Parameters:
+Port             Prio  Path      Role        State         Designated  Designated           Designated           
+Name             rity  Cost                                Cost        Root                 Bridge               
+Ethernet4        128   200       Designated  FORWARDING    400         0064b86a97e24e9c     806480a235f281ec     
+"""
+
+show_spanning_tree_mst_configuration = """\
+MST Global Configuration
+--------------------------------------------------------------------
+Region Name     : MYREGION
+Revision        : 0
+Max Age         : 20 sec
+Hello Time      : 2 sec
+Forward Delay   : 15 sec
+Max Hops        : 20
+
+MST Instance Configuration
+--------------------------------------------------------------------
+Instance    Bridge Priority   VLAN List
+0           32768             none
+2           4096              100
+"""
+
+show_spanning_tree_mst_configuration_without_global = """\
+MST Global Configuration
+--------------------------------------------------------------------
+Region Name     : 
+Revision        : 0
+Max Age         : 20 sec
+Hello Time      : 2 sec
+Forward Delay   : 15 sec
+Max Hops        : 20
+
+MST Instance Configuration
+--------------------------------------------------------------------
+Instance    Bridge Priority   VLAN List
+0           32768             none
+2           4096              100
+"""
+
+
+class TestShowMst(object):
+    class MockApplDb(object):
+        APPL_DB = 0
+
+        def __init__(self, entries):
+            self.entries = entries
+
+        def keys(self, db, pattern):
+            import fnmatch
+            return [key for key in self.entries if fnmatch.fnmatch(key, pattern)]
+
+        def get_all(self, db, key):
+            return self.entries.get(key, {})
+
+    class MockCfgDb(object):
+        def __init__(self, entries):
+            self.entries = entries
+
+        def get_entry(self, table, key):
+            if isinstance(key, tuple):
+                key = '|'.join(str(k) for k in key)
+            return self.entries.get((table, key), {})
+
+        def get_keys(self, table):
+            keys = []
+            for (tbl, key) in self.entries:
+                if tbl != table:
+                    continue
+                if '|' in key:
+                    keys.append(tuple(key.split('|')))
+                else:
+                    keys.append(key)
+            return keys
+
+    MST_CFG_ENTRIES = {
+        ('STP', 'GLOBAL'): {'mode': 'mst'},
+        ('STP_MST', 'GLOBAL'): {
+            'name': 'MYREGION',
+            'revision': '0',
+            'forward_delay': '15',
+            'hello_time': '2',
+            'max_age': '20',
+            'max_hops': '20',
+        },
+        ('STP_MST_INST', '0'): {'bridge_priority': '32768'},
+        ('STP_MST_INST', '2'): {
+            'bridge_priority': '4096',
+            'vlan_list': '100',
+        },
+        ('STP_PORT', 'Ethernet4'): {
+            'bpdu_guard': 'false',
+            'bpdu_guard_do_disable': 'false',
+            'edge_port': 'false',
+            'enabled': 'true',
+            'link_type': 'auto',
+            'root_guard': 'false',
+        },
+    }
+
+    MST_APPL_ENTRIES = {
+        '_STP_MST_INST_TABLE:0': {
+            'bridge_address': '8064b86a97e24e9c',
+            'bridge_priority': '32768',
+            'root_address': '0064b86a97e24e9c',
+            'regional_root_address': '0064b86a97e24e9c',
+            'root_path_cost': '600',
+            'regional_root_cost': '400',
+            'root_max_age': '20',
+            'root_hello_time': '2',
+            'root_forward_delay': '15',
+            'hold_time': '1',
+            'root_port': 'Ethernet4',
+            'remaining_hops': '19',
+        },
+        '_STP_MST_INST_TABLE:2': {
+            'bridge_address': '8064b86a97e24e9c',
+            'bridge_priority': '4096',
+            'root_address': '0064b86a97e24e9c',
+            'regional_root_address': '0064b86a97e24e9c',
+            'root_path_cost': '600',
+            'regional_root_cost': '400',
+            'root_max_age': '20',
+            'root_hello_time': '2',
+            'root_forward_delay': '15',
+            'hold_time': '1',
+            'root_port': 'Ethernet4',
+            'remaining_hops': '19',
+            'vlan@': '100',
+        },
+        '_STP_MST_PORT_TABLE:0:Ethernet4': {
+            'priority': '128',
+            'path_cost': '200',
+            'port_state': 'FORWARDING',
+            'desig_cost': '400',
+            'external_cost': '200',
+            'desig_root': '0064b86a97e24e9c',
+            'desig_reg_root': '0064b86a97e24e9c',
+            'desig_bridge': '806480a235f281ec',
+            'role': 'Designated',
+        },
+        '_STP_MST_PORT_TABLE:2:Ethernet4': {
+            'priority': '128',
+            'path_cost': '200',
+            'port_state': 'FORWARDING',
+            'desig_cost': '400',
+            'external_cost': '200',
+            'desig_root': '0064b86a97e24e9c',
+            'desig_reg_root': '0064b86a97e24e9c',
+            'desig_bridge': '806480a235f281ec',
+            'role': 'Designated',
+        },
+    }
+
+    @classmethod
+    def _build_cfg_db(cls):
+        return cls.MockCfgDb(copy.deepcopy(cls.MST_CFG_ENTRIES))
+
+    @classmethod
+    def _build_appl_db(cls):
+        return cls.MockApplDb(copy.deepcopy(cls.MST_APPL_ENTRIES))
+
+    def setup_method(self):
+        os.environ['UTILITIES_UNIT_TESTING'] = "1"
+        import show.stp as stp_module
+        stp_module.g_stp_appl_db = None
+        stp_module.g_stp_cfg_db = None
+        stp_module.g_stp_mode = ''
+
+        self.cfg_db = self._build_cfg_db()
+        self.appl_db = self._build_appl_db()
+        self._stp_module = stp_module
+        self._orig_connect_cfg = stp_module.connect_to_cfg_db
+        self._orig_connect_appl = stp_module.connect_to_appl_db
+        stp_module.connect_to_cfg_db = lambda: self.cfg_db
+        stp_module.connect_to_appl_db = lambda: self.appl_db
+
+    def teardown_method(self):
+        self._stp_module.connect_to_cfg_db = self._orig_connect_cfg
+        self._stp_module.connect_to_appl_db = self._orig_connect_appl
+        self._stp_module.g_stp_appl_db = None
+        self._stp_module.g_stp_cfg_db = None
+        self._stp_module.g_stp_mode = ''
+
+    def test_show_spanning_tree_mst(self):
+        runner = CliRunner()
+        db = Db()
+        result = runner.invoke(show.cli, ["spanning-tree", "mst"], obj=db)
+        assert result.exit_code == 0
+        assert "MST Instance 0" in result.output
+        assert "MST Instance 2" in result.output
+        assert "Spanning-tree Mode: MST" in result.output
+
+    def test_show_spanning_tree_mst_instance(self):
+        runner = CliRunner()
+        db = Db()
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0"], obj=db)
+        assert result.exit_code == 0
+        assert result.output == show_spanning_tree_mst_instance_0
+
+    def test_show_spanning_tree_mst_instance_detail(self):
+        runner = CliRunner()
+        db = Db()
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0", "detail"], obj=db)
+        assert result.exit_code == 0
+        assert "Regional Root Cost: 400" in result.output
+        assert "External" in result.output
+        assert "VLANs: none" in result.output
+        assert "32768" in result.output
+
+    def test_show_spanning_tree_mst_instance_0_ignores_full_vlan_mask(self):
+        runner = CliRunner()
+        db = Db()
+        appl_db = self._build_appl_db()
+        appl_db.entries['_STP_MST_INST_TABLE:0']['vlan@'] = ','.join(
+            str(vlan) for vlan in range(1, 4095))
+        self._stp_module.connect_to_appl_db = lambda: appl_db
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0"], obj=db)
+        assert result.exit_code == 0
+        assert "VLANs: none" in result.output
+        assert "VLANs: 1,2,3" not in result.output
+
+    def test_show_spanning_tree_mst_instance_0_configured_vlans(self):
+        runner = CliRunner()
+        db = Db()
+        cfg_db = self._build_cfg_db()
+        cfg_db.entries[('VLAN', 'Vlan100')] = {}
+        cfg_db.entries[('VLAN', 'Vlan200')] = {}
+        cfg_db.entries[('VLAN', 'Vlan300')] = {}
+        self._stp_module.connect_to_cfg_db = lambda: cfg_db
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0"], obj=db)
+        assert result.exit_code == 0
+        assert "VLANs: 200,300" in result.output
+
+    def test_show_spanning_tree_mst_configuration(self):
+        runner = CliRunner()
+        db = Db()
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "configuration"], obj=db)
+        assert result.exit_code == 0
+        assert result.output == show_spanning_tree_mst_configuration
+
+    def test_show_spanning_tree_mst_configuration_without_global(self):
+        runner = CliRunner()
+        db = Db()
+        cfg_db = self._build_cfg_db()
+        del cfg_db.entries[('STP_MST', 'GLOBAL')]
+        self._stp_module.connect_to_cfg_db = lambda: cfg_db
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "configuration"], obj=db)
+        assert result.exit_code == 0
+        assert result.output == show_spanning_tree_mst_configuration_without_global
+
+    def test_show_spanning_tree_mst_not_configured_message_once(self):
+        runner = CliRunner()
+        db = Db()
+        empty_cfg_db = self.MockCfgDb({})
+        empty_appl_db = self.MockApplDb({})
+        self._stp_module.connect_to_cfg_db = lambda: empty_cfg_db
+        self._stp_module.connect_to_appl_db = lambda: empty_appl_db
+
+        for cmd in (
+            ["spanning-tree", "mst", "configuration"],
+            ["spanning-tree", "mst", "vlan", "100"],
+            ["spanning-tree", "mst", "interface", "Ethernet4"],
+        ):
+            result = runner.invoke(show.cli, cmd, obj=db)
+            assert result.exit_code == 0
+            assert result.output.count("Spanning-tree is not configured") == 1
+
+        result = runner.invoke(show.cli, ["spanning-tree"], obj=db)
+        assert result.exit_code == 0
+        assert result.output.count("Spanning-tree is not configured") == 1
+
+    def test_show_spanning_tree_mst_vlan(self):
+        runner = CliRunner()
+        db = Db()
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "vlan", "100"], obj=db)
+        assert result.exit_code == 0
+        assert "MST Instance 2" in result.output
+        assert "VLANs: 100" in result.output
+
+    def test_show_spanning_tree_mst_interface(self):
+        runner = CliRunner()
+        db = Db()
+        result = runner.invoke(
+            show.cli, ["spanning-tree", "mst", "interface", "Ethernet4"], obj=db)
+        assert result.exit_code == 0
+        assert "MST Instance 0 - Interface Ethernet4" in result.output
+        assert "MST Instance 2 - Interface Ethernet4" in result.output
+        assert "Edge" in result.output
+
+    def test_show_spanning_tree_mst_interface_edge_port_enabled(self):
+        runner = CliRunner()
+        db = Db()
+        cfg_db = self._build_cfg_db()
+        cfg_db.entries[('STP_PORT', 'Ethernet4')]['edge_port'] = 'true'
+        cfg_db.entries[('STP_PORT', 'Ethernet4')]['link_type'] = 'point-to-point'
+        self._stp_module.connect_to_cfg_db = lambda: cfg_db
+        result = runner.invoke(
+            show.cli, ["spanning-tree", "mst", "interface", "Ethernet4"], obj=db)
+        assert result.exit_code == 0
+        assert "Ethernet4" in result.output
+        assert "point-to-point" in result.output
+        assert "Y" in result.output
+
+    def test_show_spanning_tree_mst_instance_ignores_appl_port_fast(self):
+        runner = CliRunner()
+        db = Db()
+        cfg_db = self._build_cfg_db()
+        cfg_db.entries[('STP_PORT', 'Ethernet4')]['edge_port'] = 'true'
+        appl_db = self._build_appl_db()
+        appl_db.entries['_STP_PORT_TABLE:Ethernet4'] = {'port_fast': 'yes'}
+        self._stp_module.connect_to_cfg_db = lambda: cfg_db
+        self._stp_module.connect_to_appl_db = lambda: appl_db
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0"], obj=db)
+        assert result.exit_code == 0
+        assert "Edge" not in result.output.split("MST Port Parameters:")[1]
+        lines = [line for line in result.output.splitlines() if line.startswith("Ethernet4")]
+        assert len(lines) == 1
+        assert "Y" not in lines[0]
+
+    def test_show_spanning_tree_mst_instance_omits_config_link_type(self):
+        runner = CliRunner()
+        db = Db()
+        cfg_db = self._build_cfg_db()
+        cfg_db.entries[('STP_PORT', 'Ethernet4')]['link_type'] = 'point-to-point'
+        self._stp_module.connect_to_cfg_db = lambda: cfg_db
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0"], obj=db)
+        assert result.exit_code == 0
+        port_section = result.output.split("MST Port Parameters:")[1]
+        assert "Link" not in port_section
+        lines = [line for line in result.output.splitlines() if line.startswith("Ethernet4")]
+        assert len(lines) == 1
+        assert "point-to-point" not in lines[0]
+
+    def test_show_spanning_tree_mst_default_in_mst_mode(self):
+        runner = CliRunner()
+        db = Db()
+        result = runner.invoke(show.cli, ["spanning-tree"], obj=db)
+        assert result.exit_code == 0
+        assert "MST Instance 0" in result.output
+        assert "MST Instance 2" in result.output
+
+
+class TestStpContinued(object):
+    @classmethod
+    def setup_class(cls):
+        os.environ['UTILITIES_UNIT_TESTING'] = "1"
+        from mock_tables import dbconnector
+        dbconnector.dedicated_dbs.clear()
+        dbconnector.load_database_config()
 
     def test_disable_enable_global_pvst(self):
         cli_runner = CliRunner()
@@ -1565,13 +1934,13 @@ class TestMstInstanceVlanDel:
 
         # Set MST mode and create MST instance 2
         self.db.cfgdb.set_entry('STP', 'GLOBAL', {'mode': 'mst'})
-        self.db.cfgdb.set_entry('STP_MST_INST', 'MST_INSTANCE|2', {
+        self.db.cfgdb.set_entry('STP_MST_INST', '2', {
             'bridge_priority': '28672'
         })
 
     def test_mst_instance_vlan_del_instance_not_exist(self):
         """Should fail because MST instance 2 does not exist."""
-        self.db.cfgdb.mod_entry('STP_MST_INST', 'MST_INSTANCE|2', None)  # Remove it
+        self.db.cfgdb.mod_entry('STP_MST_INST', '2', None)  # Remove it
 
         result = self.runner.invoke(self.vlan_cmd, ['2', '400'], obj=self.db)
         assert result.exit_code != 0  # Should fail
@@ -1631,7 +2000,7 @@ class TestMstInstanceVlanDel:
         self.db.cfgdb.set_entry('VLAN', 'Vlan500', {'vlanid': '500'})
         self.db.cfgdb.set_entry('VLAN_MEMBER', 'Vlan500|Ethernet0', {'tagging_mode': 'untagged'})
 
-        self.db.cfgdb.set_entry('STP_MST_INST', 'MST_INSTANCE|2', {
+        self.db.cfgdb.set_entry('STP_MST_INST', '2', {
             'bridge_priority': '28672',
             'vlan_list': '400,500,600'
         })
@@ -1640,7 +2009,7 @@ class TestMstInstanceVlanDel:
 
         result = self.runner.invoke(self.vlan_cmd, ['2', '500'], obj=self.db)
 
-        updated_entry = self.db.cfgdb.get_entry('STP_MST_INST', 'MST_INSTANCE|2')
+        updated_entry = self.db.cfgdb.get_entry('STP_MST_INST', '2')
 
         assert result.exit_code == 0
         assert "VLAN 500 removed from MST instance 2." in result.output
@@ -1659,7 +2028,7 @@ class TestMstInstanceVlanAdd:
             .commands["add"]
         )
         self.db.cfgdb.set_entry('STP', 'GLOBAL', {'mode': 'mst'})
-        self.db.cfgdb.set_entry('STP_MST_INST', 'MST_INSTANCE|2', {
+        self.db.cfgdb.set_entry('STP_MST_INST', '2', {
             'bridge_priority': '28672'
         })
 
@@ -1669,7 +2038,7 @@ class TestMstInstanceVlanAdd:
         assert "Instance ID must be in range" in result.output
 
     def test_instance_does_not_exist(self):
-        self.db.cfgdb.mod_entry('STP_MST_INST', 'MST_INSTANCE|2', None)
+        self.db.cfgdb.mod_entry('STP_MST_INST', '2', None)
         result = self.runner.invoke(self.vlan_cmd, ['2', '100'], obj=self.db)
         assert result.exit_code != 0
         assert "does not exist" in result.output
@@ -1686,7 +2055,7 @@ class TestMstInstanceVlanAdd:
 
     def test_vlan_already_mapped(self):
         self.db.cfgdb.set_entry('VLAN', 'Vlan100', {'vlanid': '100'})
-        self.db.cfgdb.set_entry('STP_MST_INST', 'MST_INSTANCE|2', {
+        self.db.cfgdb.set_entry('STP_MST_INST', '2', {
             'bridge_priority': '28672',
             'vlan_list': '100'
         })
@@ -1696,12 +2065,12 @@ class TestMstInstanceVlanAdd:
 
     def test_vlan_add_success(self):
         self.db.cfgdb.set_entry('VLAN', 'Vlan200', {'vlanid': '200'})
-        self.db.cfgdb.set_entry('STP_MST_INST', 'MST_INSTANCE|2', {
+        self.db.cfgdb.set_entry('STP_MST_INST', '2', {
             'bridge_priority': '28672',
             'vlan_list': '100,150'
         })
         result = self.runner.invoke(self.vlan_cmd, ['2', '200'], obj=self.db)
-        updated = self.db.cfgdb.get_entry('STP_MST_INST', 'MST_INSTANCE|2')
+        updated = self.db.cfgdb.get_entry('STP_MST_INST', '2')
         assert result.exit_code == 0
         assert "VLAN 200 added to MST instance 2." in result.output
         assert updated.get("vlan_list") == "100,150,200"
@@ -1718,7 +2087,7 @@ class TestMstInstancePriority:
             .commands["priority"]
         )
         self.db.cfgdb.set_entry('STP', 'GLOBAL', {'mode': 'mst'})
-        self.db.cfgdb.set_entry('STP_MST_INST', 'MST_INSTANCE|2', {
+        self.db.cfgdb.set_entry('STP_MST_INST', '2', {
             'bridge_priority': '28672'
         })
 
@@ -1728,7 +2097,7 @@ class TestMstInstancePriority:
         assert "Instance ID must be in range" in result.output
 
     def test_instance_does_not_exist(self):
-        self.db.cfgdb.mod_entry('STP_MST_INST', 'MST_INSTANCE|2', None)
+        self.db.cfgdb.mod_entry('STP_MST_INST', '2', None)
         result = self.runner.invoke(self.priority_cmd, ['2', '28672'], obj=self.db)
         assert result.exit_code != 0
         assert "does not exist" in result.output
@@ -1750,7 +2119,7 @@ class TestMstInstancePriority:
 
     def test_priority_set_successfully(self):
         result = self.runner.invoke(self.priority_cmd, ['2', '20480'], obj=self.db)
-        updated = self.db.cfgdb.get_entry('STP_MST_INST', 'MST_INSTANCE|2')
+        updated = self.db.cfgdb.get_entry('STP_MST_INST', '2')
         assert result.exit_code == 0
         assert "Bridge priority set to 20480 for MST instance 2." in result.output
         assert updated['bridge_priority'] == '20480'
@@ -1771,7 +2140,7 @@ class TestMstInstanceInterfaceCost:
         self.db.cfgdb.set_entry('STP', 'GLOBAL', {'mode': 'mst'})
         self.db.cfgdb.set_entry('PORT', 'Ethernet0', {})
         self.db.cfgdb.set_entry('INTERFACE', 'Ethernet0', {})
-        self.db.cfgdb.set_entry('STP_MST_INST', 'MST_INSTANCE|2', {
+        self.db.cfgdb.set_entry('STP_MST_INST', '2', {
             'bridge_priority': '28672'
         })
 
@@ -1818,7 +2187,7 @@ class TestMstInstanceInterfacePriority:
         self.db.cfgdb.set_entry('STP', 'GLOBAL', {'mode': 'mst'})
         self.db.cfgdb.set_entry('PORT', 'Ethernet0', {})
         self.db.cfgdb.set_entry('INTERFACE', 'Ethernet0', {})
-        self.db.cfgdb.set_entry('STP_MST_INST', 'MST_INSTANCE|2', {
+        self.db.cfgdb.set_entry('STP_MST_INST', '2', {
             'bridge_priority': '28672'
         })
 

@@ -107,6 +107,11 @@ MST_MIN_PORT_PATH_COST = 1
 MST_MAX_PORT_PATH_COST = 200000000
 MST_DEFAULT_PORT_PATH_COST = 1
 
+
+def mst_inst_cfg_key(instance_id):
+    """Return YANG-compatible CONFIG_DB key for STP_MST_INST (list key: instance)."""
+    return str(instance_id)
+
 MST_AUTO_LINK_TYPE = 'auto'
 MST_P2P_LINK_TYPE = 'p2p'
 MST_SHARED_LINK_TYPE = 'shared'
@@ -435,7 +440,7 @@ def enable_mst_instance0(db):
         'bridge_priority': MST_DEFAULT_BRIDGE_PRIORITY
     }
     instance_id = 0
-    db.set_entry('STP_MST_INST', f"MST_INSTANCE:INSTANCE{instance_id}", mst_inst_fvs)
+    db.set_entry('STP_MST_INST', mst_inst_cfg_key(instance_id), mst_inst_fvs)
 
 
 def enable_mst_for_interfaces(db):
@@ -1783,7 +1788,7 @@ def mst_instance_priority(_db, instance_id, priority_value):
         ctx.fail(f"Instance ID must be in range 0-{MST_MAX_INSTANCES - 1}")
 
     # Check if instance exists
-    instance_key = f"MST_INSTANCE|{instance_id}"
+    instance_key = mst_inst_cfg_key(instance_id)
     if not db.get_entry('STP_MST_INST', instance_key):
         ctx.fail(f"MST instance {instance_id} does not exist. Please create it first.")
 
@@ -1824,7 +1829,7 @@ def mst_instance_vlan_add(_db, instance_id, vlan_id):
         ctx.fail("VLAN configuration for MST instance 0 is not allowed.")
 
     # Check if instance exists
-    instance_key = f"MST_INSTANCE|{instance_id}"
+    instance_key = mst_inst_cfg_key(instance_id)
     if not db.get_entry('STP_MST_INST', instance_key):
         ctx.fail(f"MST instance {instance_id} does not exist. Please create it first.")
 
@@ -1876,7 +1881,7 @@ def mst_instance_vlan_del(_db, instance_id, vlan_id):
         ctx.fail("VLAN delete from MST instance 0 is not allowed.")
 
     # Check if instance exists
-    instance_key = f"MST_INSTANCE|{instance_id}"
+    instance_key = mst_inst_cfg_key(instance_id)
     instance_entry = db.get_entry('STP_MST_INST', instance_key)
     if not instance_entry:
         ctx.fail(f"MST instance {instance_id} does not exist.")

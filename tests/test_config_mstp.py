@@ -425,7 +425,7 @@ def test_enable_mst_instance0():
 
     # Assert that set_entry was called with the correct arguments
     mock_db.set_entry.assert_called_once_with(
-        'STP_MST_INST', 'MST_INSTANCE:INSTANCE0', expected_mst_inst_fvs
+        'STP_MST_INST', '0', expected_mst_inst_fvs
     )
 
 

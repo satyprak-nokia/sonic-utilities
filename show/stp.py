@@ -181,6 +181,10 @@ def stp_get_entry_from_mst_inst_tb(db, instance_id):
     return entry
 
 
+def stp_get_mst_total_root_path_cost(inst_entry):
+    return str(int(inst_entry['regional_root_cost']) + int(inst_entry['root_path_cost']))
+
+
 def stp_get_entry_from_mst_port_tb(db, instance_id, ifname):
     entry = stp_get_all_from_pattern(
         db, db.APPL_DB, "*STP_MST_PORT_TABLE:{}:{}".format(instance_id, ifname))
@@ -630,7 +634,7 @@ def stp_display_mst_instance(instance_id, detail=False):
         "sec", MST_TIME_W))
     click.echo("{:{}}{:{}}{:{}}{:{}}{:{}}{:{}}{}".format(
         inst_entry['root_address'], MST_BRIDGE_ID_W,
-        inst_entry['root_path_cost'], MST_ROOT_PATH_W,
+        stp_get_mst_total_root_path_cost(inst_entry), MST_ROOT_PATH_W,
         inst_entry['regional_root_address'], MST_BRIDGE_ID_W,
         inst_entry['root_port'], MST_ROOT_PORT_W,
         inst_entry['root_max_age'], MST_TIME_W,
@@ -639,8 +643,9 @@ def stp_display_mst_instance(instance_id, detail=False):
 
     if detail:
         click.echo("")
-        click.echo("Regional Root Cost: {}  Remaining Hops: {}".format(
-            inst_entry['regional_root_cost'], inst_entry['remaining_hops']))
+        click.echo("Regional Root Cost: {}  External Root Path Cost: {}  Remaining Hops: {}".format(
+            inst_entry['regional_root_cost'], inst_entry['root_path_cost'],
+            inst_entry['remaining_hops']))
 
     click.echo("")
     click.echo("MST Port Parameters:")

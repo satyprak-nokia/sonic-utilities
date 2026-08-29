@@ -171,7 +171,7 @@ hex                            sec    sec    sec    sec
 RootBridge           RootPath    RegionalRoot         RootPort       Max  Hel  Fwd
 Identifier           Cost        Identifier                          Age  lo   Dly
 hex                              hex                                 sec  sec  sec
-0064b86a97e24e9c     600         0064b86a97e24e9c     Ethernet4      20   2    15
+0064b86a97e24e9c     1000        0064b86a97e24e9c     Ethernet4      20   2    15
 
 MST Port Parameters:
 Port             Prio  Path      Role        State         Designated  Designated           Designated           
@@ -378,7 +378,7 @@ class TestShowMst(object):
         db = Db()
         result = runner.invoke(show.cli, ["spanning-tree", "mst", "0", "detail"], obj=db)
         assert result.exit_code == 0
-        assert "Regional Root Cost: 400" in result.output
+        assert "Regional Root Cost: 400  External Root Path Cost: 600" in result.output
         assert "External" in result.output
         assert "VLANs: none" in result.output
         assert "32768" in result.output

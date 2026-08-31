@@ -347,23 +347,21 @@ def test_enable_mst_for_interfaces():
         'bpdu_guard': 'false',
         'bpdu_guard_do_disable': 'false',
         'root_guard': 'false',
-        'path_cost': MST_DEFAULT_PORT_PATH_COST,
         'priority': MST_DEFAULT_PORT_PRIORITY
     }
 
     expected_fvs_mst_port = {
-        'path_cost': MST_DEFAULT_PORT_PATH_COST,
         'priority': MST_DEFAULT_PORT_PRIORITY
     }
 
-    # Assert that set_entry was called with the correct key names
-    mock_db.set_entry.assert_any_call('STP_MST_PORT', 'MST_INSTANCE|0|Ethernet0', expected_fvs_mst_port)
-    mock_db.set_entry.assert_any_call('STP_MST_PORT', 'MST_INSTANCE|0|PortChannel1', expected_fvs_mst_port)
+    mock_db.set_entry.assert_any_call('STP_MST_PORT', '0|Ethernet0', expected_fvs_mst_port)
+    mock_db.set_entry.assert_any_call('STP_MST_PORT', '0|PortChannel1', expected_fvs_mst_port)
     mock_db.set_entry.assert_any_call('STP_PORT', 'Ethernet0', expected_fvs_port)
     mock_db.set_entry.assert_any_call('STP_PORT', 'PortChannel1', expected_fvs_port)
 
-    # Ensure the correct number of calls were made to set_entry
     assert mock_db.set_entry.call_count == 4
+    for call in mock_db.set_entry.call_args_list:
+        assert 'path_cost' not in call.args[2]
 
 
 def test_check_if_global_stp_enabled():

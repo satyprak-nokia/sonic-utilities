@@ -112,6 +112,11 @@ def mst_inst_cfg_key(instance_id):
     """Return YANG-compatible CONFIG_DB key for STP_MST_INST (list key: instance)."""
     return str(instance_id)
 
+
+def mst_port_cfg_key(instance_id, interface_name):
+    """Return YANG-compatible CONFIG_DB key for STP_MST_PORT (keys: inst_id, ifname)."""
+    return f"{instance_id}|{interface_name}"
+
 MST_AUTO_LINK_TYPE = 'auto'
 MST_P2P_LINK_TYPE = 'p2p'
 MST_SHARED_LINK_TYPE = 'shared'
@@ -451,12 +456,10 @@ def enable_mst_for_interfaces(db):
         'bpdu_guard': 'false',
         'bpdu_guard_do_disable': 'false',
         'root_guard': 'false',
-        'path_cost': MST_DEFAULT_PORT_PATH_COST,
         'priority': MST_DEFAULT_PORT_PRIORITY
         }
 
     fvs_mst_port = {
-        'path_cost': MST_DEFAULT_PORT_PATH_COST,
         'priority': MST_DEFAULT_PORT_PRIORITY
         }
 
@@ -465,13 +468,13 @@ def enable_mst_for_interfaces(db):
 
     for port_key in port_dict:
         if port_key in intf_list_in_vlan_member_table:
-            db.set_entry('STP_MST_PORT', f"MST_INSTANCE|0|{port_key}", fvs_mst_port)
+            db.set_entry('STP_MST_PORT', mst_port_cfg_key(0, port_key), fvs_mst_port)
             db.set_entry('STP_PORT', port_key, fvs_port)
 
     po_ch_dict = natsorted(db.get_table('PORTCHANNEL'))
     for po_ch_key in po_ch_dict:
         if po_ch_key in intf_list_in_vlan_member_table:
-            db.set_entry('STP_MST_PORT', f"MST_INSTANCE|0|{po_ch_key}", fvs_mst_port)
+            db.set_entry('STP_MST_PORT', mst_port_cfg_key(0, po_ch_key), fvs_mst_port)
             db.set_entry('STP_PORT', po_ch_key, fvs_port)
 
 
@@ -1722,7 +1725,7 @@ def mst_instance_interface_priority(_db, instance_id, interface_name, priority):
     check_if_interface_is_valid(ctx, db, interface_name)
 
     # Construct the key and field-value dictionary
-    mst_instance_interface_key = f"MST_INSTANCE|{instance_id}|{interface_name}"
+    mst_instance_interface_key = mst_port_cfg_key(instance_id, interface_name)
     fvs = {'priority': str(priority)}
 
     # Update the database entry
@@ -1763,7 +1766,7 @@ def mst_instance_interface_cost(_db, instance_id, interface_name, cost):
     check_if_interface_is_valid(ctx, db, interface_name)
 
     # Prepare key and value for database update
-    mst_instance_interface_key = f"MST_INSTANCE|{instance_id}|{interface_name}"
+    mst_instance_interface_key = mst_port_cfg_key(instance_id, interface_name)
     fvs = {'path_cost': str(cost)}
 
     # Update database entry

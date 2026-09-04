@@ -300,15 +300,30 @@ def vlan_enable_stp(db, vlan_name):
 
 
 def interface_enable_stp(db, interface_name):
-    fvs = {'enabled': 'true',
-           'root_guard': 'false',
-           'bpdu_guard': 'false',
-           'bpdu_guard_do_disable': 'false',
-           'portfast': 'false',
-           'uplink_fast': 'false'
-           }
-    if is_global_stp_enabled(db):
-        db.set_entry('STP_PORT', interface_name, fvs)
+    if not is_global_stp_enabled(db):
+        return
+
+    mode = get_global_stp_mode(db)
+    if mode == "mst":
+        fvs = {
+            'edge_port': 'false',
+            'link_type': MST_AUTO_LINK_TYPE,
+            'enabled': 'true',
+            'root_guard': 'false',
+            'bpdu_guard': 'false',
+            'bpdu_guard_do_disable': 'false',
+            'priority': MST_DEFAULT_PORT_PRIORITY
+        }
+    else:
+        fvs = {
+            'enabled': 'true',
+            'root_guard': 'false',
+            'bpdu_guard': 'false',
+            'bpdu_guard_do_disable': 'false',
+            'portfast': 'false',
+            'uplink_fast': 'false'
+        }
+    db.set_entry('STP_PORT', interface_name, fvs)
 
 
 def is_vlan_configured_interface(db, interface_name):

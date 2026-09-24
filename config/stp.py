@@ -286,6 +286,11 @@ def get_stp_enabled_vlan_count(db):
 
 
 def vlan_enable_stp(db, vlan_name):
+    # MST maps VLANs through STP_MST_INST. STP_VLAN is PVST-only; MST
+    # STP|GLOBAL has no timer/priority fields, so writing them stores "None".
+    if get_global_stp_mode(db) == "mst":
+        return
+
     fvs = {'enabled': 'true',
            'forward_delay': get_global_stp_forward_delay(db),
            'hello_time': get_global_stp_hello_time(db),

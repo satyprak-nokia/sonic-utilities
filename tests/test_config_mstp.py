@@ -26,6 +26,7 @@ from config.stp import (
     is_valid_stp_vlan_parameters,
     is_valid_stp_global_parameters,
     enable_stp_for_vlans,
+    vlan_enable_stp,
     get_vlan_list_for_interface,
     is_global_stp_enabled,
     check_if_global_stp_enabled,
@@ -233,6 +234,43 @@ def test_is_valid_stp_vlan_parameters():
     mock_ctx.fail.assert_called_once_with(
         "2*(forward_delay-1) >= max_age >= 2*(hello_time +1 ) not met for VLAN"
     )
+
+
+def test_vlan_enable_stp_skips_mst():
+    mock_db = MagicMock()
+    mock_db.get_entry.return_value = {"mode": "mst"}
+
+    vlan_enable_stp(mock_db, "Vlan100")
+
+    mock_db.set_entry.assert_not_called()
+
+
+def test_vlan_enable_stp_pvst():
+    mock_db = MagicMock()
+
+    def get_entry(table, key):
+        if table == "STP":
+            return {
+                "mode": "pvst",
+                "forward_delay": "15",
+                "hello_time": "2",
+                "max_age": "20",
+                "priority": "32768",
+            }
+        return {}
+
+    mock_db.get_entry.side_effect = get_entry
+    mock_db.get_table.return_value = {}
+
+    vlan_enable_stp(mock_db, "Vlan100")
+
+    mock_db.set_entry.assert_called_once_with('STP_VLAN', 'Vlan100', {
+        'enabled': 'true',
+        'forward_delay': '15',
+        'hello_time': '2',
+        'max_age': '20',
+        'priority': '32768',
+    })
 
 
 def test_enable_stp_for_vlans():

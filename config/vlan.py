@@ -134,7 +134,7 @@ def add_vlan(ctx, vid, multiple):
             if clicommon.check_if_vlanid_exist(config_db, vlan, "DHCP_RELAY"):
                 ctx.fail("DHCPv6 relay config for {} already exists".format(vlan))
 
-            # Enable STP on VLAN if PVST is enabled globally
+            # Enable STP on VLAN when PVST is enabled. vlan_enable_stp skips MST.
             stp.vlan_enable_stp(config_db, vlan)
 
             # set dhcpv4_relay table

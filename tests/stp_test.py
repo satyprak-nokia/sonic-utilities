@@ -158,61 +158,19 @@ class TestStp(object):
 
 
 show_spanning_tree_mst_instance_0 = """\
-Spanning-tree Mode: MST
+#######  MST0 (CIST)       Vlans mapped : none
+Bridge               Address 8064.b86a.97e2.4e9c
+Root                 Address 0064.b86a.97e2.4e9c
+                     Port     Ethernet4                  Path cost 1000
+Regional Root        Address  0064.b86a.97e2.4e9c
+                      Internal cost 400                Rem hops 19
+Operational          Hello Time  2, Forward Delay 15, Max Age 20, Txholdcount 1
+Configured           Hello Time  2, Forward Delay 15, Max Age 20, Max Hops 20
 
-MST Instance 0 - VLANs: none
---------------------------------------------------------------------
-MST Bridge Parameters:
-Bridge               Bridge    Root   Root   Root   Hold  
-Identifier           Priority  MaxAge Hello  FwdDly Time  
-hex                            sec    sec    sec    sec   
-8064b86a97e24e9c     32768     20     2      15     1     
-
-RootBridge           RootPath    RegionalRoot         RootPort       Max  Hel  Fwd
-Identifier           Cost        Identifier                          Age  lo   Dly
-hex                              hex                                 sec  sec  sec
-0064b86a97e24e9c     1000        0064b86a97e24e9c     Ethernet4      20   2    15
-
-MST Port Parameters:
-Port             Prio  Path      Role        State         Designated  Designated           Designated           
-Name             rity  Cost                                Cost        Root                 Bridge               
-Ethernet4        128   200       Designated  FORWARDING    400         0064b86a97e24e9c     806480a235f281ec     
+Interface          Role         State          Cost       Prio.Nbr    Type       
+---------------    --------     ----------     -------    ---------   -----------
+Ethernet4          DESIGNATED   FORWARDING     200        128.25      Auto       
 """
-
-show_spanning_tree_mst_configuration = """\
-MST Global Configuration
---------------------------------------------------------------------
-Region Name     : MYREGION
-Revision        : 0
-Max Age         : 20 sec
-Hello Time      : 2 sec
-Forward Delay   : 15 sec
-Max Hops        : 20
-
-MST Instance Configuration
---------------------------------------------------------------------
-Instance    Bridge Priority   VLAN List
-0           32768             none
-2           4096              100
-"""
-
-show_spanning_tree_mst_configuration_without_global = """\
-MST Global Configuration
---------------------------------------------------------------------
-Region Name     : 
-Revision        : 0
-Max Age         : 20 sec
-Hello Time      : 2 sec
-Forward Delay   : 15 sec
-Max Hops        : 20
-
-MST Instance Configuration
---------------------------------------------------------------------
-Instance    Bridge Priority   VLAN List
-0           32768             none
-2           4096              100
-"""
-
 
 class TestShowMst(object):
     class MockApplDb(object):
@@ -305,6 +263,7 @@ class TestShowMst(object):
         },
         '_STP_MST_PORT_TABLE:0:Ethernet4': {
             'priority': '128',
+            'port_number': '25',
             'path_cost': '200',
             'port_state': 'FORWARDING',
             'desig_cost': '400',
@@ -362,26 +321,25 @@ class TestShowMst(object):
         db = Db()
         result = runner.invoke(show.cli, ["spanning-tree", "mst"], obj=db)
         assert result.exit_code == 0
-        assert "MST Instance 0" in result.output
-        assert "MST Instance 2" in result.output
-        assert "Spanning-tree Mode: MST" in result.output
+        assert "MST0 (CIST)" in result.output
+        assert "MST2   (CIST)" in result.output
+        assert "Spanning-tree Mode: MSTP" in result.output
 
     def test_show_spanning_tree_mst_instance(self):
         runner = CliRunner()
         db = Db()
-        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0"], obj=db)
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "instance", "0"], obj=db)
         assert result.exit_code == 0
         assert result.output == show_spanning_tree_mst_instance_0
 
     def test_show_spanning_tree_mst_instance_detail(self):
         runner = CliRunner()
         db = Db()
-        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0", "detail"], obj=db)
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "detail"], obj=db)
         assert result.exit_code == 0
-        assert "Regional Root Cost: 400  External Root Path Cost: 600" in result.output
-        assert "External" in result.output
-        assert "VLANs: none" in result.output
-        assert "32768" in result.output
+        assert "Ethernet4 is DESIGNATED FORWARDING" in result.output
+        assert "Bpdu send" in result.output
+        assert "Vlans mapped : none" in result.output
 
     def test_show_spanning_tree_mst_instance_0_ignores_full_vlan_mask(self):
         runner = CliRunner()
@@ -390,10 +348,10 @@ class TestShowMst(object):
         appl_db.entries['_STP_MST_INST_TABLE:0']['vlan@'] = ','.join(
             str(vlan) for vlan in range(1, 4095))
         self._stp_module.connect_to_appl_db = lambda: appl_db
-        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0"], obj=db)
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "instance", "0"], obj=db)
         assert result.exit_code == 0
-        assert "VLANs: none" in result.output
-        assert "VLANs: 1,2,3" not in result.output
+        assert "Vlans mapped : none" in result.output
+        assert "Vlans mapped : 1, 2, 3" not in result.output
 
     def test_show_spanning_tree_mst_instance_0_configured_vlans(self):
         runner = CliRunner()
@@ -403,26 +361,9 @@ class TestShowMst(object):
         cfg_db.entries[('VLAN', 'Vlan200')] = {}
         cfg_db.entries[('VLAN', 'Vlan300')] = {}
         self._stp_module.connect_to_cfg_db = lambda: cfg_db
-        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0"], obj=db)
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "instance", "0"], obj=db)
         assert result.exit_code == 0
-        assert "VLANs: 200,300" in result.output
-
-    def test_show_spanning_tree_mst_configuration(self):
-        runner = CliRunner()
-        db = Db()
-        result = runner.invoke(show.cli, ["spanning-tree", "mst", "configuration"], obj=db)
-        assert result.exit_code == 0
-        assert result.output == show_spanning_tree_mst_configuration
-
-    def test_show_spanning_tree_mst_configuration_without_global(self):
-        runner = CliRunner()
-        db = Db()
-        cfg_db = self._build_cfg_db()
-        del cfg_db.entries[('STP_MST', 'GLOBAL')]
-        self._stp_module.connect_to_cfg_db = lambda: cfg_db
-        result = runner.invoke(show.cli, ["spanning-tree", "mst", "configuration"], obj=db)
-        assert result.exit_code == 0
-        assert result.output == show_spanning_tree_mst_configuration_without_global
+        assert "Vlans mapped : 200, 300" in result.output
 
     def test_show_spanning_tree_mst_not_configured_message_once(self):
         runner = CliRunner()
@@ -433,8 +374,7 @@ class TestShowMst(object):
         self._stp_module.connect_to_appl_db = lambda: empty_appl_db
 
         for cmd in (
-            ["spanning-tree", "mst", "configuration"],
-            ["spanning-tree", "mst", "vlan", "100"],
+            ["spanning-tree", "mst", "instance", "0"],
             ["spanning-tree", "mst", "interface", "Ethernet4"],
         ):
             result = runner.invoke(show.cli, cmd, obj=db)
@@ -445,23 +385,16 @@ class TestShowMst(object):
         assert result.exit_code == 0
         assert result.output.count("Spanning-tree is not configured") == 1
 
-    def test_show_spanning_tree_mst_vlan(self):
-        runner = CliRunner()
-        db = Db()
-        result = runner.invoke(show.cli, ["spanning-tree", "mst", "vlan", "100"], obj=db)
-        assert result.exit_code == 0
-        assert "MST Instance 2" in result.output
-        assert "VLANs: 100" in result.output
-
     def test_show_spanning_tree_mst_interface(self):
         runner = CliRunner()
         db = Db()
         result = runner.invoke(
             show.cli, ["spanning-tree", "mst", "interface", "Ethernet4"], obj=db)
         assert result.exit_code == 0
-        assert "MST Instance 0 - Interface Ethernet4" in result.output
-        assert "MST Instance 2 - Interface Ethernet4" in result.output
-        assert "Edge" in result.output
+        assert "Link Type:" in result.output
+        assert "Prio.Nbr" in result.output
+        assert "0                  DESIGNATED" in result.output
+        assert "2                  DESIGNATED" in result.output
 
     def test_show_spanning_tree_mst_interface_edge_port_enabled(self):
         runner = CliRunner()
@@ -473,9 +406,8 @@ class TestShowMst(object):
         result = runner.invoke(
             show.cli, ["spanning-tree", "mst", "interface", "Ethernet4"], obj=db)
         assert result.exit_code == 0
-        assert "Ethernet4" in result.output
-        assert "point-to-point" in result.output
-        assert "Y" in result.output
+        assert "Link Type: P2P" in result.output
+        assert "0                  DESIGNATED" in result.output
 
     def test_show_spanning_tree_mst_instance_ignores_appl_port_fast(self):
         runner = CliRunner()
@@ -486,12 +418,11 @@ class TestShowMst(object):
         appl_db.entries['_STP_PORT_TABLE:Ethernet4'] = {'port_fast': 'yes'}
         self._stp_module.connect_to_cfg_db = lambda: cfg_db
         self._stp_module.connect_to_appl_db = lambda: appl_db
-        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0"], obj=db)
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "instance", "0"], obj=db)
         assert result.exit_code == 0
-        assert "Edge" not in result.output.split("MST Port Parameters:")[1]
         lines = [line for line in result.output.splitlines() if line.startswith("Ethernet4")]
         assert len(lines) == 1
-        assert "Y" not in lines[0]
+        assert "P2P" not in lines[0]
 
     def test_show_spanning_tree_mst_instance_omits_config_link_type(self):
         runner = CliRunner()
@@ -499,21 +430,19 @@ class TestShowMst(object):
         cfg_db = self._build_cfg_db()
         cfg_db.entries[('STP_PORT', 'Ethernet4')]['link_type'] = 'point-to-point'
         self._stp_module.connect_to_cfg_db = lambda: cfg_db
-        result = runner.invoke(show.cli, ["spanning-tree", "mst", "0"], obj=db)
+        result = runner.invoke(show.cli, ["spanning-tree", "mst", "instance", "0"], obj=db)
         assert result.exit_code == 0
-        port_section = result.output.split("MST Port Parameters:")[1]
-        assert "Link" not in port_section
         lines = [line for line in result.output.splitlines() if line.startswith("Ethernet4")]
         assert len(lines) == 1
-        assert "point-to-point" not in lines[0]
+        assert "P2P" in lines[0]
 
     def test_show_spanning_tree_mst_default_in_mst_mode(self):
         runner = CliRunner()
         db = Db()
         result = runner.invoke(show.cli, ["spanning-tree"], obj=db)
         assert result.exit_code == 0
-        assert "MST Instance 0" in result.output
-        assert "MST Instance 2" in result.output
+        assert "MST0 (CIST)" in result.output
+        assert "MST2   (CIST)" in result.output
 
 
 class TestStpContinued(object):

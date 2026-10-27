@@ -331,6 +331,113 @@ def interface_enable_stp(db, interface_name):
     db.set_entry('STP_PORT', interface_name, fvs)
 
 
+def _db_key_text(key):
+    if isinstance(key, (list, tuple)):
+        return "|".join(str(part) for part in key)
+    return str(key)
+
+
+def _vlan_id_text(vlan_name):
+    text = str(vlan_name)
+    if text.startswith("Vlan"):
+        return text[4:]
+    return text
+
+
+def _vlan_ids_from_mst_list(vlan_list):
+    vlan_ids = set()
+    if not vlan_list:
+        return vlan_ids
+    for token in str(vlan_list).split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if "-" in token:
+            start, end = token.split("-", 1)
+            if start.isdigit() and end.isdigit() and int(start) <= int(end):
+                for vid in range(int(start), int(end) + 1):
+                    vlan_ids.add(str(vid))
+                continue
+        vlan_ids.add(token)
+    return vlan_ids
+
+
+def mst_instance_for_vlan(db, vlan_name):
+    """Return the MST instance that owns vlan_name. Unmapped VLANs stay in instance 0."""
+    vlan_id = _vlan_id_text(vlan_name)
+    for key, entry in (db.get_table('STP_MST_INST') or {}).items():
+        inst = _db_key_text(key)
+        if inst == "0" or not isinstance(entry, dict):
+            continue
+        if vlan_id in _vlan_ids_from_mst_list(entry.get('vlan_list', '')):
+            return inst
+    return "0"
+
+
+def _mst_port_key_parts(key):
+    if isinstance(key, (list, tuple)) and len(key) >= 2:
+        return str(key[0]), str(key[1])
+    text = str(key)
+    if "|" not in text:
+        return None, None
+    inst, ifname = text.split("|", 1)
+    return inst, ifname
+
+
+def ensure_stp_config_on_vlan_member_add(db, interface_name, vlan_name):
+    """Create STP_PORT and STP_MST_PORT when an interface joins a VLAN.
+
+    Existing rows are left unchanged so a re-add does not reset port priority,
+    edge-port, or link-type.
+    """
+    if not is_global_stp_enabled(db):
+        return
+
+    if not db.get_entry('STP_PORT', interface_name):
+        interface_enable_stp(db, interface_name)
+
+    if get_global_stp_mode(db) != "mst":
+        return
+
+    instances = {"0", mst_instance_for_vlan(db, vlan_name)}
+    for inst in sorted(instances, key=int):
+        key = mst_port_cfg_key(inst, interface_name)
+        if not db.get_entry('STP_MST_PORT', key):
+            db.set_entry('STP_MST_PORT', key, {'priority': MST_DEFAULT_PORT_PRIORITY})
+
+
+def clear_stp_config_on_vlan_member_delete(db, vlan_name, interface_name):
+    """Remove STP rows that no longer apply after interface leaves vlan_name.
+
+    VLAN_MEMBER still contains this membership when vlan member del calls in.
+    That VLAN is excluded from the remaining-member check.
+    """
+    if not is_global_stp_enabled(db):
+        return
+
+    db.set_entry('STP_VLAN_PORT', "{}|{}".format(vlan_name, interface_name), None)
+
+    remaining = [
+        vlan for vlan in get_vlan_list_for_interface(db, interface_name)
+        if str(vlan) != str(vlan_name)
+    ]
+
+    if get_global_stp_mode(db) == "mst":
+        remaining_instances = {mst_instance_for_vlan(db, vlan) for vlan in remaining}
+        if remaining:
+            # Instance 0 is the CIST port row for every interface that is still L2.
+            remaining_instances.add("0")
+        for key in db.get_keys('STP_MST_PORT') or []:
+            inst, ifname = _mst_port_key_parts(key)
+            if ifname != interface_name or inst is None:
+                continue
+            if inst not in remaining_instances:
+                db.set_entry('STP_MST_PORT', mst_port_cfg_key(inst, interface_name), None)
+
+    if not remaining:
+        db.set_entry('STP_PORT', interface_name, None)
+
+
 def is_vlan_configured_interface(db, interface_name):
     intf_to_vlan_list = get_vlan_list_for_interface(db, interface_name)
     if intf_to_vlan_list:  # if empty

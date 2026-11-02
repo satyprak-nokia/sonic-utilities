@@ -2382,6 +2382,7 @@ class TestStpInterfacePriority:
     @patch('config.stp.check_if_stp_enabled_for_interface')
     @patch('config.stp.check_if_global_stp_enabled')
     def test_priority_valid_mst(self, mock_global, mock_iface_enabled, mock_iface_valid, mock_mode):
+        self.cfgdb.get_keys.return_value = ['0|Ethernet8']
         result = self.runner.invoke(
             config.config.commands["spanning-tree"]
             .commands["interface"]
@@ -2391,7 +2392,12 @@ class TestStpInterfacePriority:
         )
 
         assert result.exit_code == 0
-        self.cfgdb.mod_entry.assert_called_with('STP_PORT', 'Ethernet8', {
+        self.cfgdb.mod_entry.assert_any_call('STP_PORT', 'Ethernet8', {
+            'priority': '240',
+            'edge_port': 'false',
+            'link_type': 'auto'
+        })
+        self.cfgdb.mod_entry.assert_any_call('STP_MST_PORT', '0|Ethernet8', {
             'priority': '240'
         })
 

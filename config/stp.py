@@ -1702,11 +1702,23 @@ def stp_interface_priority(_db, interface_name, priority_value):
 
     if stp_mode == "pvst":
         fvs.update({'portfast': 'false', 'uplink_fast': 'false'})
-    elif stp_mode == "mstp":
+    elif stp_mode == "mst":
         fvs.update({'edge_port': 'false', 'link_type': 'auto'})
 
     # Update the database entry
     db.mod_entry('STP_PORT', interface_name, fvs)
+
+    if stp_mode == "mst":
+        fvs_mst_port = {'priority': str(priority_value)}
+        mst_port_updated = False
+        for key in db.get_keys('STP_MST_PORT') or []:
+            inst, ifname = _mst_port_key_parts(key)
+            if ifname != interface_name or inst is None:
+                continue
+            db.mod_entry('STP_MST_PORT', mst_port_cfg_key(inst, interface_name), fvs_mst_port)
+            mst_port_updated = True
+        if not mst_port_updated:
+            db.mod_entry('STP_MST_PORT', mst_port_cfg_key(0, interface_name), fvs_mst_port)
 
 
 # config spanning_tree interface cost <ifname> <cost-value>

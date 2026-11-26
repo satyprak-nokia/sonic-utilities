@@ -167,10 +167,10 @@ Regional Root        Address  0064.b86a.97e2.4e9c
 Operational          Hello Time  2, Forward Delay 15, Max Age 20, Txholdcount 1
 Configured           Hello Time  2, Forward Delay 15, Max Age 20, Max Hops 20
 
-Interface          Role         State          Cost       Prio.Nbr    Type       
+Interface          Role         State          Cost       Prio.Nbr    Type""" + "       \n" + """\
 ---------------    --------     ----------     -------    ---------   -----------
-Ethernet4          DESIGNATED   FORWARDING     200        128.25      Auto       
-"""
+Ethernet4          DESIGNATED   FORWARDING     200        128.25      Auto""" + "       \n"
+
 
 class TestShowMst(object):
     class MockApplDb(object):
@@ -312,8 +312,6 @@ class TestShowMst(object):
     def teardown_method(self):
         self._stp_module.connect_to_cfg_db = self._orig_connect_cfg
         self._stp_module.connect_to_appl_db = self._orig_connect_appl
-        self._stp_module.g_stp_appl_db = None
-        self._stp_module.g_stp_cfg_db = None
         self._stp_module.g_stp_mode = ''
 
     def test_show_spanning_tree_mst(self):

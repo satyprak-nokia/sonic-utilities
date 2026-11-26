@@ -818,6 +818,8 @@ def stp_show_mstp_root_guard():
 @click.pass_context
 def show_stp_bpdu_guard(ctx):
     """Show spanning_tree bpdu_guard"""
+    if not stp_ensure_db_connected():
+        return
 
     if g_stp_cfg_db.get_entry("STP", "GLOBAL").get('mode') == 'mst':
         stp_show_mstp_bpdu_guard()
@@ -852,6 +854,8 @@ def show_stp_bpdu_guard(ctx):
 @click.pass_context
 def show_stp_root_guard(ctx):
     """Show spanning_tree root_guard"""
+    if not stp_ensure_db_connected():
+        return
 
     if g_stp_cfg_db.get_entry("STP", "GLOBAL").get('mode') == 'mst':
         stp_show_mstp_root_guard()
